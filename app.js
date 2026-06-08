@@ -31,7 +31,8 @@ function getSysPrompt() {
 }
 
 // ── Auth check ────────────────────────────────────────────
-const ME = localStorage.getItem('cometa_user');
+const ME        = localStorage.getItem('cometa_user');
+const UNLIMITED = ME?.toLowerCase() === 'muhammad';
 if (!ME) { window.location.href = 'auth.html'; throw ''; }
 
 // ── State ─────────────────────────────────────────────────
@@ -56,11 +57,15 @@ const openBtn     = $('openBtn');
 marked.setOptions({ breaks: true, gfm: true });
 
 // ── Sidebar ───────────────────────────────────────────────
-collapseBtn.addEventListener('click', () => { sidebar.classList.add('hidden'); openBtn.classList.add('show'); });
-openBtn.addEventListener('click', () => {
-  if (window.innerWidth <= 680) sidebar.classList.add('open');
-  else { sidebar.classList.remove('hidden'); openBtn.classList.remove('show'); }
-});
+const backdrop = $('sidebarBackdrop');
+function openSidebar() { sidebar.classList.add('open'); sidebar.classList.remove('hidden'); openBtn.classList.remove('show'); backdrop.classList.add('show'); }
+function closeSidebar() {
+  if (window.innerWidth <= 680) { sidebar.classList.remove('open'); backdrop.classList.remove('show'); }
+  else { sidebar.classList.add('hidden'); openBtn.classList.add('show'); backdrop.classList.remove('show'); }
+}
+collapseBtn.addEventListener('click', closeSidebar);
+openBtn.addEventListener('click', openSidebar);
+backdrop.addEventListener('click', closeSidebar);
 
 // ── Confirm modal ─────────────────────────────────────────
 const confirmOverlay = $('confirmOverlay');
@@ -193,7 +198,9 @@ async function submit() {
   if (!text || busy) return;
 
   // Лимит
-  try { const n = await getCount(); if (n >= DAY_LIMIT) { showLimitToast(); return; } } catch {}
+  if (!UNLIMITED) {
+    try { const n = await getCount(); if (n >= DAY_LIMIT) { showLimitToast(); return; } } catch {}
+  }
 
   welcome.style.display = 'none';
 
@@ -281,13 +288,20 @@ async function getCount() {
 }
 async function incCount() { await setDoc(doc(db, 'users', ME, 'daily', today()), { count: increment(1) }, { merge: true }); }
 async function refreshLimits() {
+  const fill = $('limitBarFill'); const txt = $('limitText');
+  if (UNLIMITED) {
+    if (fill) fill.style.width = '0%';
+    if (txt)  txt.textContent  = '∞ — без лимита';
+    return;
+  }
   try {
     const n   = await getCount();
     const pct = Math.round((n / DAY_LIMIT) * 100);
-    const fill = $('limitBarFill'); const txt = $('limitText');
     if (fill) fill.style.width = Math.min(pct, 100) + '%';
     if (txt)  txt.textContent  = `${n} / ${DAY_LIMIT} запросов (${pct}%)`;
-  } catch {}
+  } catch {
+    if (txt) txt.textContent = 'Нет данных';
+  }
 }
 function showLimitToast() {
   const d = document.createElement('div'); d.className = 'limit-toast'; d.textContent = 'Лимит 100 запросов в день исчерпан. Попробуй завтра.';

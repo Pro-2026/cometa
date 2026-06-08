@@ -839,17 +839,82 @@ body.light .status-msg { color: rgba(0,0,0,0.35); }
 
 /* ── MOBILE ───────────────────────────────────────────── */
 @media (max-width: 680px) {
+
+  html, body { height: 100dvh; overflow: hidden; }
+
+  .app { height: 100dvh; }
+
+  /* Сайдбар — выезжает поверх, не сдвигает основной контент */
   .sidebar {
-    position: fixed; left: 0; top: 0; height: 100%;
-    z-index: 50;
-    transform: translateX(-100%);
-    transition: transform 0.28s ease;
-    width: 260px !important; min-width: 260px !important;
+    position: fixed; left: 0; top: 0;
+    height: 100dvh; height: 100vh;
+    z-index: 100;
+    transform: translateX(-110%);
+    transition: transform 0.3s cubic-bezier(.4,0,.2,1);
+    width: 280px !important; min-width: 280px !important;
+    border-radius: 0 16px 16px 0;
+    margin: 0 !important;
+    box-shadow: 4px 0 32px rgba(0,0,0,0.5);
   }
-  .sidebar.open { transform: none; }
-  .open-btn { display: flex !important; }
-  .chips { grid-template-columns: 1fr; }
-  .welcome h1 { font-size: 22px; }
-  .msg__row { padding: 0 16px; }
-  .input-wrap { padding: 10px 14px 16px; }
+  .sidebar.open { transform: translateX(0); }
+  .sidebar.hidden { transform: translateX(-110%); width: 280px !important; min-width: 280px !important; border-width: 1px; }
+
+  /* Затемнение за сайдбаром */
+  .sidebar-backdrop {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 99;
+    backdrop-filter: blur(2px);
+  }
+  .sidebar-backdrop.show { display: block; }
+
+  /* Кнопка открыть — всегда видна */
+  .open-btn { display: flex !important; top: 12px; left: 12px; }
+
+  /* Основной экран — на всю ширину */
+  .main { width: 100%; height: 100dvh; }
+
+  /* Сообщения */
+  .msg__row { padding: 0 12px; max-width: 100%; }
+  .msg__text { font-size: 14px; }
+  .msg--user .msg__text { max-width: 82vw; }
+
+  /* Приветствие */
+  .welcome { padding: 80px 20px 20px; }
+  .welcome h1 { font-size: 20px; }
+  .chips { grid-template-columns: 1fr; gap: 6px; }
+  .chip { padding: 10px 12px; font-size: 13px; }
+
+  /* Поле ввода */
+  .input-wrap { padding: 8px 12px 12px; padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+  .input-box { border-radius: 14px; padding: 10px 10px 10px 14px; }
+  #msgInput { font-size: 16px; } /* 16px prevents iOS zoom */
+  .note { font-size: 11px; margin-top: 5px; }
+
+  /* Настройки */
+  .settings-overlay { align-items: flex-end; }
+  .settings-panel {
+    width: 100%; max-width: 100%;
+    border-radius: 20px 20px 0 0;
+    max-height: 90dvh;
+    padding-bottom: calc(20px + env(safe-area-inset-bottom));
+  }
+
+  /* Модалки */
+  .modal-overlay { align-items: flex-end; padding: 0; }
+  .modal-box {
+    width: 100%; max-width: 100%;
+    border-radius: 20px 20px 0 0;
+    padding-bottom: calc(20px + env(safe-area-inset-bottom));
+  }
+
+  /* Auth */
+  .auth-wrap { align-items: flex-end; padding-bottom: env(safe-area-inset-bottom); }
+  .auth-box {
+    width: 100%; border-radius: 20px 20px 0 0;
+    padding: 28px 24px;
+    padding-bottom: calc(28px + env(safe-area-inset-bottom));
+    border-bottom: none;
+  }
 }
