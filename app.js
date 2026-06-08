@@ -6,11 +6,11 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
 
 // ── Config ────────────────────────────────────────────────
-const GROQ_KEY  = ['gsk_99TxFPwclWgMZ5','sgVfDCWGdyb3FY5Wmi','PzjhqSxwhsaikRD9cBTW'].join('');
-const MODEL_ID  = 'llama-3.3-70b-versatile';
-const GROQ_URL  = 'https://api.groq.com/openai/v1/chat/completions';
-const DAY_LIMIT = 100;
-const URL_RE    = /https?:\/\/[^\s<>"]+/g;
+const GEMINI_KEY   = ['AQ.Ab8RN6JXtpPJ_vWP', 'vwy3a1erJWbAeHvFbViq_2Ns5jy9TF3CVw'].join('');
+const GEMINI_MODEL = 'gemini-2.5-flash-lite-preview-06-17';
+const GEMINI_URL   = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:streamGenerateContent?alt=sse&key=${GEMINI_KEY}`;
+const DAY_LIMIT    = 100;
+const URL_RE       = /https?:\/\/[^\s<>"]+/g;
 
 const SYS_PROMPT = `Ты — Cometa. Умный ассистент. Помогаешь с чем угодно.
 
@@ -249,10 +249,18 @@ async function submit() {
   let full = '';
 
   try {
-    const res = await fetch(GROQ_URL, {
+    const geminiMsgs = curMsgs.map(m => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content }]
+    }));
+    const res = await fetch(GEMINI_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + GROQ_KEY },
-      body: JSON.stringify({ model: MODEL_ID, messages: [{ role: 'system', content: getSysPrompt() }, ...curMsgs], stream: true, max_tokens: 4096, temperature: 0.7 }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: getSysPrompt() }] },
+        contents: geminiMsgs,
+        generationConfig: { maxOutputTokens: 4096, temperature: 0.7 }
+      }),
     });
     if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j?.error?.message || 'HTTP ' + res.status); }
 
@@ -265,12 +273,12 @@ async function submit() {
       for (const line of lines) {
         if (!line.startsWith('data: ')) continue;
         const raw = line.slice(6).trim();
-        if (raw === '[DONE]' || !raw) continue;
-        try { const d = JSON.parse(raw).choices?.[0]?.delta?.content; if (d) { full += d; txtEl.innerHTML = marked.parse(full); txtEl.classList.add('typing'); txtEl.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el)); messages.scrollTop = messages.scrollHeight; } } catch {}
+        if (!raw) continue;
+        try { const d = JSON.parse(raw).candidates?.[0]?.content?.parts?.[0]?.text; if (d) { full += d; txtEl.innerHTML = marked.parse(full); txtEl.classList.add('typing'); txtEl.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el)); messages.scrollTop = messages.scrollHeight; } } catch {}
       }
     }
   } catch (err) {
-    const isLimit = err.message?.includes('429') || err.message?.includes('rate_limit') || err.message?.includes('Rate limit');
+    const isLimit = err.message?.includes('429') || err.message?.includes('quota') || err.message?.includes('RESOURCE_EXHAUSTED');
     const userMsg = isLimit ? 'Cometa сейчас перегружена — слишком много запросов. Попробуй через час.' : 'Что-то пошло не так. Попробуй ещё раз.';
     txtEl.innerHTML = `<span style="color:#f87171">${userMsg}</span>`;
     full = '';
