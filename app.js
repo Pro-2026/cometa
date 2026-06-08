@@ -63,7 +63,7 @@ const openBtn    = document.getElementById('openBtn');
 function todayKey() { return new Date().toISOString().split('T')[0]; }
 
 async function getTodayCount() {
-  if (!currentUser) return 0;
+  if (!CUR_USER) return 0;
   const ref  = doc(db, 'users', CUR_USER, 'daily', todayKey());
   const snap = await getDoc(ref);
   return snap.exists() ? (snap.data().count || 0) : 0;
