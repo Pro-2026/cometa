@@ -36,10 +36,11 @@ const UNLIMITED = ME?.toLowerCase() === 'muhammad';
 if (!ME) { window.location.href = 'auth.html'; throw ''; }
 
 // ── State ─────────────────────────────────────────────────
-let chats   = [];
-let curId   = null;
-let curMsgs = [];
-let busy    = false;
+let chats      = [];
+let curId      = null;
+let curMsgs    = [];
+let busy       = false;
+let localCount = -1;   // кэш счётчика, -1 = не загружен
 
 // ── DOM ───────────────────────────────────────────────────
 const $  = id => document.getElementById(id);
@@ -197,14 +198,21 @@ async function submit() {
   const text = msgInput.value.trim();
   if (!text || busy) return;
 
-  // Лимит
-  if (!UNLIMITED) {
-    try { const n = await getCount(); if (n >= DAY_LIMIT) { showLimitToast(); return; } } catch {}
-  }
-
+  // Блокируем ввод СРАЗУ — никакого спама
+  busy = true;
+  msgInput.value = ''; msgInput.style.height = 'auto'; sendBtn.disabled = true;
   welcome.style.display = 'none';
 
-  // URL контент
+  // Показываем пузырёк пользователя немедленно
+  addBubble('user', text);
+
+  // Проверяем лимит по кэшу (без Firestore-запроса)
+  if (!UNLIMITED) {
+    if (localCount < 0) { try { localCount = await getCount(); } catch { localCount = 0; } }
+    if (localCount >= DAY_LIMIT) { showLimitToast(); busy = false; return; }
+  }
+
+  // Загружаем ссылки (статус видно сразу после пузырька)
   let ctx = text;
   const urls = text.match(URL_RE);
   if (urls) {
@@ -213,27 +221,28 @@ async function submit() {
     ind.remove();
   }
 
-  // Создаём чат
+  // Создаём чат (фоново, не ждём)
   if (!curId) {
-    let id = 'local_' + Date.now();
-    try {
-      const ref = await addDoc(collection(db, 'users', ME, 'chats'), { title: text.slice(0, 40), createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
-      id = ref.id;
-    } catch {}
-    curId = id;
-    chats.unshift({ id: curId, title: text.slice(0, 40) });
+    const title = text.slice(0, 40);
+    curId = 'local_' + Date.now();
+    chats.unshift({ id: curId, title });
     renderChats();
+    addDoc(collection(db, 'users', ME, 'chats'), { title, createdAt: serverTimestamp(), updatedAt: serverTimestamp() })
+      .then(ref => {
+        const old = curId; curId = ref.id;
+        const c = chats.find(x => x.id === old); if (c) c.id = curId;
+        renderChats();
+      }).catch(() => {});
   }
 
   curMsgs.push({ role: 'user', content: ctx });
+  // Сохраняем сообщение фоново
   if (!curId.startsWith('local_')) {
     addDoc(collection(db, 'users', ME, 'chats', curId, 'messages'), { role: 'user', content: text, createdAt: serverTimestamp() }).catch(() => {});
     updateDoc(doc(db, 'users', ME, 'chats', curId), { updatedAt: serverTimestamp() }).catch(() => {});
   }
 
-  addBubble('user', text);
-  msgInput.value = ''; msgInput.style.height = 'auto'; sendBtn.disabled = true; busy = true;
-
+  // ИИ отвечает
   const aiEl = addBubble('ai', '');
   const txtEl = aiEl.querySelector('.msg__text');
   txtEl.classList.add('typing');
@@ -266,13 +275,15 @@ async function submit() {
   }
 
   txtEl.classList.remove('typing');
+  curMsgs.push({ role: 'assistant', content: full });
+
   if (full && !curId.startsWith('local_')) {
-    curMsgs.push({ role: 'assistant', content: full });
     addDoc(collection(db, 'users', ME, 'chats', curId, 'messages'), { role: 'assistant', content: full, createdAt: serverTimestamp() }).catch(() => {});
-    incCount().catch(() => {});
-    refreshLimits().catch(() => {});
-  } else if (full) {
-    curMsgs.push({ role: 'assistant', content: full });
+    if (!UNLIMITED) {
+      incCount().catch(() => {});
+      localCount++;
+      refreshLimitsDisplay(localCount);
+    }
   }
 
   busy = false;
@@ -287,22 +298,29 @@ async function getCount() {
   return s.exists() ? (s.data().count || 0) : 0;
 }
 async function incCount() { await setDoc(doc(db, 'users', ME, 'daily', today()), { count: increment(1) }, { merge: true }); }
-async function refreshLimits() {
+
+function refreshLimitsDisplay(n) {
   const fill = $('limitBarFill'); const txt = $('limitText');
   if (UNLIMITED) {
     if (fill) fill.style.width = '0%';
     if (txt)  txt.textContent  = '∞ — без лимита';
     return;
   }
+  const pct = Math.round((n / DAY_LIMIT) * 100);
+  if (fill) fill.style.width = Math.min(pct, 100) + '%';
+  if (txt)  txt.textContent  = `${n} / ${DAY_LIMIT} запросов (${pct}%)`;
+}
+
+async function refreshLimits() {
+  if (UNLIMITED) { refreshLimitsDisplay(0); return; }
   try {
-    const n   = await getCount();
-    const pct = Math.round((n / DAY_LIMIT) * 100);
-    if (fill) fill.style.width = Math.min(pct, 100) + '%';
-    if (txt)  txt.textContent  = `${n} / ${DAY_LIMIT} запросов (${pct}%)`;
+    localCount = await getCount();
+    refreshLimitsDisplay(localCount);
   } catch {
-    if (txt) txt.textContent = 'Нет данных';
+    const txt = $('limitText'); if (txt) txt.textContent = 'Нет данных';
   }
 }
+
 function showLimitToast() {
   const d = document.createElement('div'); d.className = 'limit-toast'; d.textContent = 'Лимит 100 запросов в день исчерпан. Попробуй завтра.';
   document.body.appendChild(d); setTimeout(() => d.remove(), 4000);
