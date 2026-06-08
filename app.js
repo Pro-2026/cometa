@@ -270,8 +270,10 @@ async function submit() {
       }
     }
   } catch (err) {
-    txtEl.innerHTML = `<span style="color:#f87171">Ошибка: ${err.message}</span>`;
-    full = err.message;
+    const isLimit = err.message?.includes('429') || err.message?.includes('rate_limit') || err.message?.includes('Rate limit');
+    const userMsg = isLimit ? 'Cometa сейчас перегружена — слишком много запросов. Попробуй через час.' : 'Что-то пошло не так. Попробуй ещё раз.';
+    txtEl.innerHTML = `<span style="color:#f87171">${userMsg}</span>`;
+    full = '';
   }
 
   txtEl.classList.remove('typing');
