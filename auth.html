@@ -77,7 +77,7 @@ document.getElementById('authForm').addEventListener('submit', async e => {
   submitBtn.disabled = true;
   submitBtn.textContent = '...';
 
-  const fakeEmail = `${username}@cometa.internal`;
+  const safe = username.replace(/[^a-z0-9]/g, "x");`n  const fakeEmail = `u${safe}@cometa.app`;
 
   try {
     if (tab === 'register') {
