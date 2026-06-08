@@ -1,7 +1,6 @@
 // ── Firebase ──────────────────────────────────────────────
 import { auth, db } from './firebase-config.js';
-import { onAuthStateChanged, signOut, deleteUser }
-  from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+import { signInAnonymously } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 import {
   collection, doc, addDoc, getDoc, getDocs, setDoc,
   updateDoc, deleteDoc, query, orderBy, serverTimestamp, increment
@@ -33,10 +32,12 @@ function getSystemPrompt() {
 }
 
 // ── State ─────────────────────────────────────────────────
-let currentUser = null;
-let chats       = [];   // [{ id, title }]
+const CUR_USER  = localStorage.getItem('cometa_user');
+if (!CUR_USER) { window.location.href = 'auth.html'; }
+
+let chats       = [];
 let curId       = null;
-let curMessages = [];   // in-memory for current chat
+let curMessages = [];
 let busy        = false;
 
 // ── DOM ───────────────────────────────────────────────────
@@ -50,29 +51,26 @@ const newChatBtn = document.getElementById('newChatBtn');
 const collapseBtn= document.getElementById('collapseBtn');
 const openBtn    = document.getElementById('openBtn');
 
-// ── Auth gate ─────────────────────────────────────────────
-onAuthStateChanged(auth, async user => {
-  if (!user) { window.location.href = 'auth.html'; return; }
-  currentUser = user;
-  const snap = await getDoc(doc(db, 'users', user.uid));
-  if (snap.exists()) localStorage.setItem('cometa_username', snap.data().username || '');
+// ── Init ─────────────────────────────────────────────────
+(async () => {
+  await signInAnonymously(auth); // для доступа к Firestore
   applyTheme(localStorage.getItem('cometa_theme') || 'dark');
   await loadChats();
   await refreshLimitDisplay();
-});
+})();
 
 // ── Limits ────────────────────────────────────────────────
 function todayKey() { return new Date().toISOString().split('T')[0]; }
 
 async function getTodayCount() {
   if (!currentUser) return 0;
-  const ref  = doc(db, 'users', currentUser.uid, 'daily', todayKey());
+  const ref  = doc(db, 'users', CUR_USER, 'daily', todayKey());
   const snap = await getDoc(ref);
   return snap.exists() ? (snap.data().count || 0) : 0;
 }
 
 async function incTodayCount() {
-  const ref = doc(db, 'users', currentUser.uid, 'daily', todayKey());
+  const ref = doc(db, 'users', CUR_USER, 'daily', todayKey());
   await setDoc(ref, { count: increment(1) }, { merge: true });
 }
 
@@ -169,7 +167,7 @@ async function confirmRename() {
   const c = chats.find(x => x.id === renameTarget);
   if (c) {
     c.title = name;
-    await updateDoc(doc(db, 'users', currentUser.uid, 'chats', renameTarget), { title: name });
+    await updateDoc(doc(db, 'users', CUR_USER, 'chats', renameTarget), { title: name });
     renderHistory();
   }
   closeRenameModal();
@@ -185,7 +183,7 @@ renameInput.addEventListener('keydown', e => {
 
 // ── Chats ─────────────────────────────────────────────────
 async function loadChats() {
-  const q    = query(collection(db, 'users', currentUser.uid, 'chats'), orderBy('updatedAt', 'desc'));
+  const q    = query(collection(db, 'users', CUR_USER, 'chats'), orderBy('updatedAt', 'desc'));
   const snap = await getDocs(q);
   chats = snap.docs.map(d => ({ id: d.id, title: d.data().title || 'Новый чат' }));
   renderHistory();
@@ -196,9 +194,9 @@ async function deleteChat(id) {
   const ok = await showConfirm('Удалить чат?', `«${c?.title || 'Этот чат'}» будет удалён безвозвратно.`);
   if (!ok) return;
   // Удаляем сообщения, затем сам чат
-  const msgsSnap = await getDocs(collection(db, 'users', currentUser.uid, 'chats', id, 'messages'));
+  const msgsSnap = await getDocs(collection(db, 'users', CUR_USER, 'chats', id, 'messages'));
   for (const m of msgsSnap.docs) await deleteDoc(m.ref);
-  await deleteDoc(doc(db, 'users', currentUser.uid, 'chats', id));
+  await deleteDoc(doc(db, 'users', CUR_USER, 'chats', id));
   chats = chats.filter(x => x.id !== id);
   if (curId === id) newChat();
   else renderHistory();
@@ -258,7 +256,7 @@ async function openChat(id) {
   welcome.style.display = 'none';
   renderHistory();
 
-  const q    = query(collection(db, 'users', currentUser.uid, 'chats', id, 'messages'), orderBy('createdAt'));
+  const q    = query(collection(db, 'users', CUR_USER, 'chats', id, 'messages'), orderBy('createdAt'));
   const snap = await getDocs(q);
   snap.docs.forEach(d => {
     const m = d.data();
@@ -324,7 +322,7 @@ async function submit() {
 
   // Создаём чат если нет
   if (!curId) {
-    const chatRef = await addDoc(collection(db, 'users', currentUser.uid, 'chats'), {
+    const chatRef = await addDoc(collection(db, 'users', CUR_USER, 'chats'), {
       title:     rawText.slice(0, 40),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -335,10 +333,10 @@ async function submit() {
   }
 
   curMessages.push({ role: 'user', content: contextText });
-  await addDoc(collection(db, 'users', currentUser.uid, 'chats', curId, 'messages'), {
+  await addDoc(collection(db, 'users', CUR_USER, 'chats', curId, 'messages'), {
     role: 'user', content: rawText, createdAt: serverTimestamp(),
   });
-  await updateDoc(doc(db, 'users', currentUser.uid, 'chats', curId), { updatedAt: serverTimestamp() });
+  await updateDoc(doc(db, 'users', CUR_USER, 'chats', curId), { updatedAt: serverTimestamp() });
 
   addBubble('user', rawText);
   msgInput.value = '';
@@ -402,7 +400,7 @@ async function submit() {
   textEl.classList.remove('typing');
   if (full) {
     curMessages.push({ role: 'assistant', content: full });
-    await addDoc(collection(db, 'users', currentUser.uid, 'chats', curId, 'messages'), {
+    await addDoc(collection(db, 'users', CUR_USER, 'chats', curId, 'messages'), {
       role: 'assistant', content: full, createdAt: serverTimestamp(),
     });
     await incTodayCount();
@@ -470,8 +468,7 @@ function applyTheme(theme) {
 }
 
 settingsBtn.addEventListener('click', async () => {
-  document.getElementById('settingsUsername').textContent =
-    localStorage.getItem('cometa_username') || '';
+  document.getElementById('settingsUsername').textContent = CUR_USER || '';
   settingsOverlay.classList.add('open');
   await refreshLimitDisplay();
 });
@@ -509,8 +506,8 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
   settingsOverlay.classList.remove('open');
   const ok = await showConfirm('Выйти из аккаунта?', 'Вы будете перенаправлены на страницу входа.', 'Выйти');
   if (!ok) return;
-  await signOut(auth);
-  localStorage.removeItem('cometa_username');
+  localStorage.removeItem('cometa_user');
+  localStorage.removeItem('cometa_user_prompt');
   window.location.href = 'auth.html';
 });
 
@@ -518,20 +515,14 @@ document.getElementById('deleteAccountBtn').addEventListener('click', async () =
   settingsOverlay.classList.remove('open');
   const ok = await showConfirm('Удалить аккаунт?', 'Все чаты и данные будут удалены безвозвратно.');
   if (!ok) return;
-  try {
-    const uid = currentUser.uid;
-    // Удаляем все чаты и сообщения
-    const chatsSnap = await getDocs(collection(db, 'users', uid, 'chats'));
-    for (const chatDoc of chatsSnap.docs) {
-      const msgsSnap = await getDocs(collection(db, 'users', uid, 'chats', chatDoc.id, 'messages'));
-      for (const m of msgsSnap.docs) await deleteDoc(m.ref);
-      await deleteDoc(chatDoc.ref);
-    }
-    await deleteDoc(doc(db, 'users', uid));
-    await deleteUser(currentUser);
-    localStorage.removeItem('cometa_username');
-    window.location.href = 'auth.html';
-  } catch (err) {
-    alert('Для удаления аккаунта выйди и войди заново, затем повтори попытку.');
+  const chatsSnap = await getDocs(collection(db, 'users', CUR_USER, 'chats'));
+  for (const chatDoc of chatsSnap.docs) {
+    const msgsSnap = await getDocs(collection(db, 'users', CUR_USER, 'chats', chatDoc.id, 'messages'));
+    for (const m of msgsSnap.docs) await deleteDoc(m.ref);
+    await deleteDoc(chatDoc.ref);
   }
+  await deleteDoc(doc(db, 'users', CUR_USER));
+  localStorage.removeItem('cometa_user');
+  localStorage.removeItem('cometa_user_prompt');
+  window.location.href = 'auth.html';
 });

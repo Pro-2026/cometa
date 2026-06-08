@@ -30,23 +30,20 @@
 
 <script type="module">
 import { auth, db } from './firebase-config.js';
-import {
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  onAuthStateChanged
-} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
-import { doc, setDoc, getDoc } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
+import { signInAnonymously } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+import { doc, getDoc, setDoc } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
 
 if (localStorage.getItem('cometa_theme') === 'light') document.body.classList.add('light');
+if (localStorage.getItem('cometa_user')) window.location.href = 'index.html';
+
+async function hashPass(pw) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pw + 'cmt_2026'));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
 
 const errEl     = document.getElementById('authError');
 const submitBtn = document.getElementById('authSubmit');
 let tab = 'login';
-
-// Если уже авторизован — сразу в приложение
-onAuthStateChanged(auth, user => {
-  if (user) window.location.href = 'index.html';
-});
 
 document.querySelectorAll('.auth-tab').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -57,19 +54,9 @@ document.querySelectorAll('.auth-tab').forEach(btn => {
   });
 });
 
-const ERR_MAP = {
-  'auth/email-already-in-use':    'Это имя уже занято',
-  'auth/invalid-credential':      'Неверное имя или пароль',
-  'auth/wrong-password':          'Неверный пароль',
-  'auth/user-not-found':          'Пользователь не найден',
-  'auth/weak-password':           'Пароль слишком короткий (минимум 6 символов)',
-  'auth/too-many-requests':       'Слишком много попыток. Подождите немного',
-  'auth/network-request-failed':  'Ошибка сети',
-};
-
 document.getElementById('authForm').addEventListener('submit', async e => {
   e.preventDefault();
-  const username = document.getElementById('authUsername').value.trim().toLowerCase();
+  const username = document.getElementById('authUsername').value.trim();
   const password = document.getElementById('authPassword').value;
   if (!username || !password) return;
 
@@ -77,25 +64,25 @@ document.getElementById('authForm').addEventListener('submit', async e => {
   submitBtn.disabled = true;
   submitBtn.textContent = '...';
 
-  const safe = username.replace(/[^a-z0-9]/g, "x");`n  const fakeEmail = `u${safe}@cometa.app`;
-
   try {
+    await signInAnonymously(auth);
+    const hash    = await hashPass(password);
+    const userRef = doc(db, 'users', username);
+
     if (tab === 'register') {
-      const cred = await createUserWithEmailAndPassword(auth, fakeEmail, password);
-      await setDoc(doc(db, 'users', cred.user.uid), {
-        username,
-        createdAt: Date.now()
-      });
-      localStorage.setItem('cometa_username', username);
+      const snap = await getDoc(userRef);
+      if (snap.exists()) throw new Error('Имя уже занято');
+      if (password.length < 4) throw new Error('Пароль минимум 4 символа');
+      await setDoc(userRef, { password: hash, createdAt: Date.now() });
     } else {
-      await signInWithEmailAndPassword(auth, fakeEmail, password);
-      // Подгрузить username из Firestore
-      const snap = await getDoc(doc(db, 'users', auth.currentUser.uid));
-      if (snap.exists()) localStorage.setItem('cometa_username', snap.data().username || username);
+      const snap = await getDoc(userRef);
+      if (!snap.exists() || snap.data().password !== hash) throw new Error('Неверное имя или пароль');
     }
+
+    localStorage.setItem('cometa_user', username);
     window.location.href = 'index.html';
   } catch (err) {
-    errEl.textContent = ERR_MAP[err.code] || 'Ошибка: ' + (err.message || err.code);
+    errEl.textContent = err.message || 'Ошибка';
     submitBtn.disabled = false;
     submitBtn.textContent = tab === 'login' ? 'Войти' : 'Создать аккаунт';
   }
