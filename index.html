@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Cometa</title>
+  <link rel="icon" type="image/svg+xml" href="comet.svg"/>
+  <link rel="stylesheet" href="style.css"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+
+    <div class="sb-top">
+      <button class="sq-btn" id="collapseBtn" title="Свернуть">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg>
+      </button>
+      <button class="sq-btn" id="newChatBtn" title="Новый чат">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
+    </div>
+
+    <div class="sb-chats" id="sbChats">
+      <!-- история вставляется через JS -->
+    </div>
+
+    <div class="sb-foot">
+      <span class="sb-online"></span>
+      <span class="sb-model-name" style="flex:1">Cometa</span>
+      <button class="sq-btn" id="settingsBtn" title="Настройки">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+    </div>
+
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main" id="main">
+
+    <!-- кнопка открыть sidebar -->
+    <button class="open-btn" id="openBtn">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg>
+    </button>
+
+    <!-- сообщения -->
+    <div class="messages" id="messages">
+      <div class="welcome" id="welcome">
+        <div class="welcome-icon">
+          <img src="comet.svg" class="comet-logo" width="56" height="56" alt="Cometa"/>
+        </div>
+        <h1>Чем могу помочь?</h1>
+        <div class="chips">
+          <button class="chip" onclick="hint('Что ты умеешь делать?')">Что ты умеешь?</button>
+          <button class="chip" onclick="hint('Напиши функцию сортировки на Python')">Помоги с кодом</button>
+          <button class="chip" onclick="hint('Напиши короткий рассказ про космос')">Напиши рассказ</button>
+          <button class="chip" onclick="hint('Переведи: Привет, как дела?')">Перевести текст</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ввод -->
+    <div class="input-wrap">
+      <div class="input-box" id="inputBox">
+        <textarea id="msgInput" rows="1" placeholder="Сообщение…"></textarea>
+        <button class="send-btn" id="sendBtn" disabled>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+        </button>
+      </div>
+      <p class="note">Cometa может ошибаться. Проверяй важную информацию.</p>
+    </div>
+
+  </div>
+</div>
+
+<!-- Подтверждение (универсальная модалка) -->
+<div class="modal-overlay" id="confirmOverlay">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title" id="confirmTitle">Подтвердите</span>
+    </div>
+    <p class="confirm-text" id="confirmText"></p>
+    <div class="modal-actions">
+      <button class="modal-btn modal-btn--cancel" id="confirmCancel">Отмена</button>
+      <button class="modal-btn modal-btn--danger" id="confirmOk">Удалить</button>
+    </div>
+  </div>
+</div>
+
+<!-- Переименование чата -->
+<div class="modal-overlay" id="renameOverlay">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title">Переименовать чат</span>
+      <button class="sq-btn" id="renameClose">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <input type="text" class="modal-input" id="renameInput" placeholder="Название чата"/>
+    <div class="modal-actions">
+      <button class="modal-btn modal-btn--cancel" id="renameCancel">Отмена</button>
+      <button class="modal-btn modal-btn--ok" id="renameOk">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- Настройки -->
+<div class="settings-overlay" id="settingsOverlay">
+  <div class="settings-panel" id="settingsPanel">
+    <div class="settings-header">
+      <span class="settings-title">Настройки</span>
+      <button class="sq-btn" id="settingsClose">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="settings-body">
+
+      <!-- Тема -->
+      <div class="settings-row">
+        <span class="settings-label">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+          Тема
+        </span>
+        <div class="theme-toggle" id="themeToggle">
+          <button class="theme-opt" data-theme="dark">Тёмная</button>
+          <button class="theme-opt" data-theme="light">Светлая</button>
+        </div>
+      </div>
+
+      <!-- Лимиты -->
+      <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:8px;padding-bottom:12px">
+        <span class="settings-label">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          Лимиты
+        </span>
+        <div class="limit-bar"><div class="limit-bar-fill" id="limitBarFill"></div></div>
+        <span class="limit-text" id="limitText">— / 100 запросов</span>
+      </div>
+
+      <!-- Промт -->
+      <div class="settings-row settings-row--btn" id="openPromptBtn">
+        <span class="settings-label">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          Промт для Cometa
+        </span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="opacity:0.4"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+
+      <!-- Аккаунт -->
+      <div class="settings-section-title">Аккаунт</div>
+      <div class="settings-row" style="border:none;flex-direction:column;align-items:flex-start;gap:10px;padding-bottom:0">
+        <div style="display:flex;align-items:center;justify-content:space-between;width:100%">
+          <span class="settings-label">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <span id="settingsUsername"></span>
+          </span>
+          <button class="modal-btn modal-btn--cancel" id="logoutBtn">Выйти</button>
+        </div>
+        <button class="delete-account-link" id="deleteAccountBtn">Удалить аккаунт</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Промт для Cometa -->
+<div class="modal-overlay" id="promptOverlay">
+  <div class="modal-box" style="width:480px;max-width:95vw">
+    <div class="modal-header">
+      <span class="modal-title">Промт для Cometa</span>
+      <button class="sq-btn" id="promptClose">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <p style="font-size:13px;color:rgba(255,255,255,0.45);margin-bottom:10px;line-height:1.5">Расскажи кто ты, чем занимаешься — ИИ будет учитывать это в каждом ответе</p>
+    <textarea class="settings-textarea" id="userPromptInput" placeholder="Например: я программист, пишу на Python, предпочитаю короткие ответы без лишней воды…" rows="6"></textarea>
+    <div class="modal-actions" style="margin-top:10px">
+      <button class="modal-btn modal-btn--cancel" id="promptCancel">Отмена</button>
+      <button class="modal-btn modal-btn--ok" id="promptSave">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

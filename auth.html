@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Cometa — Вход</title>
+  <link rel="icon" type="image/svg+xml" href="comet.svg"/>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+
+<div class="auth-wrap">
+  <div class="auth-box">
+    <img src="comet.svg" class="comet-logo auth-logo" width="52" height="52" alt="Cometa"/>
+    <h1 class="auth-heading">Cometa</h1>
+
+    <div class="auth-tabs">
+      <button class="auth-tab active" data-tab="login">Войти</button>
+      <button class="auth-tab" data-tab="register">Регистрация</button>
+    </div>
+
+    <form class="auth-form" id="authForm" autocomplete="on">
+      <input type="text" id="authUsername" class="auth-input" placeholder="Имя пользователя" autocomplete="username" required/>
+      <input type="password" id="authPassword" class="auth-input" placeholder="Пароль" autocomplete="current-password" required/>
+      <button type="submit" class="auth-submit" id="authSubmit">Войти</button>
+      <p class="auth-error" id="authError"></p>
+    </form>
+  </div>
+</div>
+
+<script type="module">
+import { auth, db } from './firebase-config.js';
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  onAuthStateChanged
+} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+import { doc, setDoc, getDoc } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
+
+if (localStorage.getItem('cometa_theme') === 'light') document.body.classList.add('light');
+
+const errEl     = document.getElementById('authError');
+const submitBtn = document.getElementById('authSubmit');
+let tab = 'login';
+
+// Если уже авторизован — сразу в приложение
+onAuthStateChanged(auth, user => {
+  if (user) window.location.href = 'index.html';
+});
+
+document.querySelectorAll('.auth-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    tab = btn.dataset.tab;
+    document.querySelectorAll('.auth-tab').forEach(b => b.classList.toggle('active', b === btn));
+    submitBtn.textContent = tab === 'login' ? 'Войти' : 'Создать аккаунт';
+    errEl.textContent = '';
+  });
+});
+
+const ERR_MAP = {
+  'auth/email-already-in-use':    'Это имя уже занято',
+  'auth/invalid-credential':      'Неверное имя или пароль',
+  'auth/wrong-password':          'Неверный пароль',
+  'auth/user-not-found':          'Пользователь не найден',
+  'auth/weak-password':           'Пароль слишком короткий (минимум 6 символов)',
+  'auth/too-many-requests':       'Слишком много попыток. Подождите немного',
+  'auth/network-request-failed':  'Ошибка сети',
+};
+
+document.getElementById('authForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const username = document.getElementById('authUsername').value.trim().toLowerCase();
+  const password = document.getElementById('authPassword').value;
+  if (!username || !password) return;
+
+  errEl.textContent = '';
+  submitBtn.disabled = true;
+  submitBtn.textContent = '...';
+
+  const fakeEmail = `${username}@cometa.internal`;
+
+  try {
+    if (tab === 'register') {
+      const cred = await createUserWithEmailAndPassword(auth, fakeEmail, password);
+      await setDoc(doc(db, 'users', cred.user.uid), {
+        username,
+        createdAt: Date.now()
+      });
+      localStorage.setItem('cometa_username', username);
+    } else {
+      await signInWithEmailAndPassword(auth, fakeEmail, password);
+      // Подгрузить username из Firestore
+      const snap = await getDoc(doc(db, 'users', auth.currentUser.uid));
+      if (snap.exists()) localStorage.setItem('cometa_username', snap.data().username || username);
+    }
+    window.location.href = 'index.html';
+  } catch (err) {
+    errEl.textContent = ERR_MAP[err.code] || 'Ошибка: ' + (err.message || err.code);
+    submitBtn.disabled = false;
+    submitBtn.textContent = tab === 'login' ? 'Войти' : 'Создать аккаунт';
+  }
+});
+</script>
+</body>
+</html>
