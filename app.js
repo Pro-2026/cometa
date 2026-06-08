@@ -299,16 +299,15 @@ async function submit() {
   const rawText = msgInput.value.trim();
   if (!rawText || busy) return;
 
-  // Проверка дневного лимита
-  const count = await getTodayCount();
-  if (count >= DAY_LIMIT) {
-    showLimitError();
-    return;
-  }
+  // Проверка лимита (не блокирует если Firestore недоступен)
+  try {
+    const count = await getTodayCount();
+    if (count >= DAY_LIMIT) { showLimitError(); return; }
+  } catch { /* firestore недоступен — пропускаем проверку */ }
 
   welcome.style.display = 'none';
 
-  // Собираем текст + содержимое URL если есть
+  // Содержимое URL если есть
   let contextText = rawText;
   const urls = rawText.match(URL_RE);
   if (urls) {
@@ -320,23 +319,30 @@ async function submit() {
     indicator.remove();
   }
 
-  // Создаём чат если нет
+  // Создаём чат если нет (не блокирует если Firestore недоступен)
   if (!curId) {
-    const chatRef = await addDoc(collection(db, 'users', CUR_USER, 'chats'), {
-      title:     rawText.slice(0, 40),
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
-    curId = chatRef.id;
+    const tempId = 'local_' + Date.now();
+    try {
+      const chatRef = await addDoc(collection(db, 'users', CUR_USER, 'chats'), {
+        title: rawText.slice(0, 40),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      curId = chatRef.id;
+    } catch { curId = tempId; }
     chats.unshift({ id: curId, title: rawText.slice(0, 40) });
     renderHistory();
   }
 
   curMessages.push({ role: 'user', content: contextText });
-  await addDoc(collection(db, 'users', CUR_USER, 'chats', curId, 'messages'), {
-    role: 'user', content: rawText, createdAt: serverTimestamp(),
-  });
-  await updateDoc(doc(db, 'users', CUR_USER, 'chats', curId), { updatedAt: serverTimestamp() });
+
+  // Сохраняем в Firestore асинхронно (не ждём — не блокирует отправку)
+  if (!curId.startsWith('local_')) {
+    addDoc(collection(db, 'users', CUR_USER, 'chats', curId, 'messages'), {
+      role: 'user', content: rawText, createdAt: serverTimestamp(),
+    }).catch(() => {});
+    updateDoc(doc(db, 'users', CUR_USER, 'chats', curId), { updatedAt: serverTimestamp() }).catch(() => {});
+  }
 
   addBubble('user', rawText);
   msgInput.value = '';
@@ -400,11 +406,13 @@ async function submit() {
   textEl.classList.remove('typing');
   if (full) {
     curMessages.push({ role: 'assistant', content: full });
-    await addDoc(collection(db, 'users', CUR_USER, 'chats', curId, 'messages'), {
-      role: 'assistant', content: full, createdAt: serverTimestamp(),
-    });
-    await incTodayCount();
-    await refreshLimitDisplay();
+    if (!curId.startsWith('local_')) {
+      addDoc(collection(db, 'users', CUR_USER, 'chats', curId, 'messages'), {
+        role: 'assistant', content: full, createdAt: serverTimestamp(),
+      }).catch(() => {});
+      incTodayCount().catch(() => {});
+      refreshLimitDisplay().catch(() => {});
+    }
   }
 
   busy = false;
