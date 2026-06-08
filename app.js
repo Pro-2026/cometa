@@ -6,9 +6,12 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
 
 // ── Config ────────────────────────────────────────────────
+const IS_LOCAL     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const GEMINI_KEY   = ['AQ.Ab8RN6JXtpPJ_vWP', 'vwy3a1erJWbAeHvFbViq_2Ns5jy9TF3CVw'].join('');
 const GEMINI_MODEL = 'gemini-2.5-flash-lite-preview-06-17';
 const GEMINI_URL   = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:streamGenerateContent?alt=sse&key=${GEMINI_KEY}`;
+const LM_URL       = 'http://localhost:1234/v1/chat/completions';
+const LM_MODEL     = 'qwen2.5-1.5b-instruct';
 const DAY_LIMIT    = 100;
 const URL_RE       = /https?:\/\/[^\s<>"]+/g;
 
@@ -250,32 +253,48 @@ async function submit() {
   let full = '';
 
   try {
-    const geminiMsgs = curMsgs.map(m => ({
-      role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.content }]
-    }));
-    const res = await fetch(GEMINI_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: getSysPrompt() }] },
-        contents: geminiMsgs,
-        generationConfig: { maxOutputTokens: 4096, temperature: 0.7 }
-      }),
-    });
-    if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j?.error?.message || 'HTTP ' + res.status); }
-
-    const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = '';
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += dec.decode(value, { stream: true });
-      const lines = buf.split('\n'); buf = lines.pop();
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        const raw = line.slice(6).trim();
-        if (!raw) continue;
-        try { const d = JSON.parse(raw).candidates?.[0]?.content?.parts?.[0]?.text; if (d) { full += d; txtEl.innerHTML = marked.parse(full); txtEl.classList.add('typing'); txtEl.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el)); messages.scrollTop = messages.scrollHeight; } } catch {}
+    if (IS_LOCAL) {
+      // LM Studio — потоковый режим OpenAI
+      const res = await fetch(LM_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: LM_MODEL, messages: [{ role: 'system', content: getSysPrompt() }, ...curMsgs], stream: true, max_tokens: 4096, temperature: 0.7 }),
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split('\n'); buf = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const raw = line.slice(6).trim();
+          if (raw === '[DONE]' || !raw) continue;
+          try { const d = JSON.parse(raw).choices?.[0]?.delta?.content; if (d) { full += d; txtEl.innerHTML = marked.parse(full); txtEl.classList.add('typing'); txtEl.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el)); messages.scrollTop = messages.scrollHeight; } } catch {}
+        }
+      }
+    } else {
+      // Gemini — потоковый SSE
+      const geminiMsgs = curMsgs.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }));
+      const res = await fetch(GEMINI_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ system_instruction: { parts: [{ text: getSysPrompt() }] }, contents: geminiMsgs, generationConfig: { maxOutputTokens: 4096, temperature: 0.7 } }),
+      });
+      if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j?.error?.message || 'HTTP ' + res.status); }
+      const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split('\n'); buf = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const raw = line.slice(6).trim();
+          if (!raw) continue;
+          try { const d = JSON.parse(raw).candidates?.[0]?.content?.parts?.[0]?.text; if (d) { full += d; txtEl.innerHTML = marked.parse(full); txtEl.classList.add('typing'); txtEl.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el)); messages.scrollTop = messages.scrollHeight; } } catch {}
+        }
       }
     }
   } catch (err) {
